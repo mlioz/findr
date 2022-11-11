@@ -1,5 +1,5 @@
-use regex::{Regex, RegexSet};
-use std::{error::Error, mem::take};
+use regex::Regex;
+use std::error::Error;
 
 use clap::{App, Arg};
 
@@ -40,7 +40,8 @@ pub fn get_args() -> MyResult<Config> {
                 .help("Entry type")
                 .short("t")
                 .long("type")
-                .possible_values(&["l", "d", "f"]),
+                .multiple(true)
+                .possible_values(&["d", "f", "l"]),
         )
         .arg(
             Arg::with_name("path")
@@ -51,17 +52,14 @@ pub fn get_args() -> MyResult<Config> {
         )
         .get_matches();
 
-    // println!("{:#?}", matches);
-
     Ok(Config {
         paths: matches.values_of_lossy("path").unwrap(),
         names: matches
             .values_of_lossy("name")
             .unwrap_or(Vec::new())
             .iter()
-            .map(|pat| Regex::new(pat))
-            .map(|x| x.)
-            .collect(),
+            .map(|pat| parse_regex(pat))
+            .collect::<MyResult<Vec<Regex>>>()?,
         entry_types: matches.values_of_lossy("type").map_or(Vec::new(), |vc| {
             vc.iter()
                 .map(|entry_type| match entry_type.as_str() {
@@ -78,4 +76,11 @@ pub fn get_args() -> MyResult<Config> {
 pub fn run(config: Config) -> MyResult<()> {
     println!("{:?}", config);
     Ok(())
+}
+
+fn parse_regex(pattern: &str) -> MyResult<Regex> {
+    match Regex::new(pattern) {
+        Err(_) => Err(From::from(format!("Invalid --name \"{}\"", pattern))),
+        Ok(regex) => Ok(regex),
+    }
 }
