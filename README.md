@@ -1,4 +1,6 @@
-# Rust find
+# findr
+
+### Rust implementation of the unix 'find' tool
 
 ```
 USAGE:
