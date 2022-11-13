@@ -1,9 +1,10 @@
 use regex::Regex;
-use std::error::Error;
+use std::{error::Error, fs::FileType};
 
 use clap::{App, Arg};
+use walkdir::WalkDir;
 
-// use crate::EntryType::*;
+use crate::EntryType::*; // Allows 'Dir' instead of 'EntryType::Dir'
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -23,7 +24,7 @@ pub struct Config {
 
 pub fn get_args() -> MyResult<Config> {
     let matches = App::new("findr")
-        .author("Myron Lioz <liozmyron@gmail.com")
+        .author("Myron Lioz <liozmyron@gmail.com>")
         .about("Rust find")
         .version("0.1.0")
         .arg(
@@ -60,21 +61,44 @@ pub fn get_args() -> MyResult<Config> {
             .iter()
             .map(|pat| parse_regex(pat))
             .collect::<MyResult<Vec<Regex>>>()?,
-        entry_types: matches.values_of_lossy("type").map_or(Vec::new(), |vc| {
-            vc.iter()
-                .map(|entry_type| match entry_type.as_str() {
-                    "l" => EntryType::Link,
-                    "f" => EntryType::File,
-                    "d" => EntryType::Dir,
-                    _ => unreachable!(),
-                })
-                .collect()
-        }),
+        entry_types: matches
+            .values_of_lossy("type")
+            .map_or(vec![Dir, File, Link], |vc| {
+                vc.iter()
+                    .map(|entry_type| match entry_type.as_str() {
+                        "l" => EntryType::Link,
+                        "f" => EntryType::File,
+                        "d" => EntryType::Dir,
+                        _ => unreachable!("Invalid file type"),
+                    })
+                    .collect()
+            }),
     })
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:?}", config);
+    for path in &config.paths {
+        for entry in WalkDir::new(path) {
+            match entry {
+                Err(e) => eprintln!("{}", e),
+                Ok(path) => {
+                    let filename = path
+                        .file_name()
+                        .to_str()
+                        .ok_or::<Box<dyn Error>>(From::from("Failed to parse path url unicode"))?;
+
+                    let is_name = config.names.len() == 0 || is_correct_name(&filename, &config);
+                    let is_type = config.entry_types.len() == 3
+                        || is_correct_type(&path.file_type(), &config);
+
+                    if is_name && is_type {
+                        println!("{}", path.path().display())
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -83,4 +107,20 @@ fn parse_regex(pattern: &str) -> MyResult<Regex> {
         Err(_) => Err(From::from(format!("Invalid --name \"{}\"", pattern))),
         Ok(regex) => Ok(regex),
     }
+}
+
+fn is_correct_name(filename: &str, config: &Config) -> bool {
+    config.names.iter().any(|pat| pat.is_match(filename))
+}
+
+fn is_correct_type(file_type: &FileType, config: &Config) -> bool {
+    if file_type.is_dir() && config.entry_types.contains(&Dir) {
+        return true;
+    } else if file_type.is_file() && config.entry_types.contains(&File) {
+        return true;
+    } else if file_type.is_symlink() && config.entry_types.contains(&Link) {
+        return true;
+    }
+
+    false
 }
