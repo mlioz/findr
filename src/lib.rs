@@ -3,8 +3,6 @@ use std::error::Error;
 
 use clap::{App, Arg};
 
-// use crate::EntryType::*;
-
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -82,5 +80,17 @@ fn parse_regex(pattern: &str) -> MyResult<Regex> {
     match Regex::new(pattern) {
         Err(_) => Err(From::from(format!("Invalid --name \"{}\"", pattern))),
         Ok(regex) => Ok(regex),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use walkdir::WalkDir;
+    #[test]
+    fn test_walkdir() {
+        let walk_dir = WalkDir::new("tests");
+        for (i, entry) in walk_dir.into_iter().enumerate() {
+            println!("{}: {}", i, entry.unwrap().path().display());
+        }
     }
 }
