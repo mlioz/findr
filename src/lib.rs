@@ -78,25 +78,24 @@ pub fn get_args() -> MyResult<Config> {
 
 pub fn run(config: Config) -> MyResult<()> {
     for path in &config.paths {
-        for entry in WalkDir::new(path) {
-            match entry {
-                Err(e) => eprintln!("{}", e),
-                Ok(path) => {
-                    let filename = path
-                        .file_name()
-                        .to_str()
-                        .ok_or::<Box<dyn Error>>(From::from("Failed to parse path url unicode"))?;
-
-                    let is_name = config.names.len() == 0 || is_correct_name(&filename, &config);
-                    let is_type = config.entry_types.len() == 3
-                        || is_correct_type(&path.file_type(), &config);
-
-                    if is_name && is_type {
-                        println!("{}", path.path().display())
-                    }
+        let output = WalkDir::new(path)
+            .into_iter()
+            .filter_map(|entry| {
+                match entry {
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        None
+                    },
+                    Ok(dir_entry) => Some(dir_entry),
                 }
-            }
-        }
+            })
+            .filter(|dir_entry| is_correct_type(&dir_entry.file_type(), &config))
+            .filter(|dir_entry| is_correct_name(&dir_entry.file_name().to_string_lossy(), &config))
+            .map(|dir_entry| dir_entry.path().display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        println!("{}", output);
     }
 
     Ok(())
@@ -110,10 +109,12 @@ fn parse_regex(pattern: &str) -> MyResult<Regex> {
 }
 
 fn is_correct_name(filename: &str, config: &Config) -> bool {
-    config.names.iter().any(|pat| pat.is_match(filename))
+    config.names.len() == 0 || config.names.iter().any(|pat| pat.is_match(filename))
 }
 
 fn is_correct_type(file_type: &FileType, config: &Config) -> bool {
+    if config.entry_types.len() == 3 { return true };
+
     if file_type.is_dir() && config.entry_types.contains(&Dir) {
         return true;
     } else if file_type.is_file() && config.entry_types.contains(&File) {
